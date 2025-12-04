@@ -38,23 +38,24 @@ SET e.moneda = row.moneda,
     e.numPartidas = toInteger(row.numPartidas);
 CREATE INDEX IF NOT EXISTS FOR (e:Entrada) ON (e.folioEntrada);
 
+CALL apoc.periodic.iterate(
+"
 LOAD CSV WITH HEADERS FROM 'file:///Salida.csv' AS row
-MERGE (s:Salida {folioSalida: row.folioSalida})
-SET s.moneda = row.moneda,
-    s.cliente = row.cliente,
-    s.vendedor = row.vendedor,
-    s.fecha = row.fecha,
-    s.condicionDePago = row.condicionDePago,
-    s.medioEmbarque = row.medioEmbarque,
-    s.cantidadTotal = toFloat(row.cantidadTotal),
-    s.promedioDescuento = toFloat(row.promedioDescuento),
-    s.totalImporte = toFloat(row.totalImporte),
-    s.totalDescuento = toFloat(row.totalDescuento),
-    s.totalImpuesto = toFloat(row.totalImpuesto),
-    s.total = toFloat(row.total),
-    s.pctDescuentoGlobal = toFloat(row.pctDescuentoGlobal),
-    s.numArticulos = toInteger(row.numArticulos),
-    s.numPartidas = toInteger(row.numPartidas);
-CREATE INDEX IF NOT EXISTS FOR (s:Salida) ON (s.folioSalida);
+RETURN row
+",
+"
+MERGE (s:Salida {folioSalida: trim(row.folioSalida)})
+SET  s.cliente = trim(row.claveCliente),
+     s.vendedor = trim(row.claveVendedor),
+     s.fecha = trim(row.claveFecha),
+     s.claveArticulo = trim(row.claveArticulo),
+     s.cantidad = toFloat(row.cantidad),
+     s.dpctDescuento = toFloat(row.dpctDescuento),
+     s.totalImporte = toFloat(row.dTotalImporte),
+     s.totalDescuento = toFloat(row.dTotalDescuento),
+     s.totalImpuesto = toFloat(row.dTotalImpuesto),
+     s.total = toFloat(row.dTotal)
+",
+{batchSize: 500, parallel: true});
 
 CALL db.schema.visualization;
