@@ -181,3 +181,15 @@ RETURN Articulo1,
        FoliosJuntos
 ORDER BY FoliosJuntos DESC
 LIMIT 10;
+
+
+//Dado un artículo A recomienda un artículo B tomando en cuenta la cuenta de folios en los que aparecen juntos A y B
+MATCH (a1:Articulo)-[r:COOCURRE_SALIDA]->(a2:Articulo) 
+WHERE r.vecesJuntos >= 2 
+RETURN 
+	a1.claveArticulo AS articuloA, 
+	a2.claveArticulo AS articuloB, 
+	r.vecesJuntos AS vecesJuntos 
+ORDER BY articuloA, 
+r.vecesJuntos DESC 
+LIMIT 100;
