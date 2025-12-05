@@ -1,9 +1,8 @@
 // =================================================================
 // SCRIPT DE CARGA PARA NEO4J - ENTRADAS Y SALIDAS DE ALMACÉN
 // =================================================================
-// Usando APOC para grandes volúmenes de datos (medio millón de registros)
-// Coloca tus CSV en: file:///nombre_archivo.csv
-// O usa URL: 'https://...'
+// Orden: 1. Índices → 2. Nodos → 3. Relaciones
+// Sin propiedades en relaciones
 
 // =================================================================
 // PASO 1: CREAR ÍNDICES
@@ -22,19 +21,6 @@ FOR (a:Articulo) ON (a.claveArticulo);
 CREATE INDEX fecha_clave IF NOT EXISTS
 FOR (f:Fecha) ON (f.claveFecha);
 
-CREATE INDEX entrada_folio IF NOT EXISTS
-FOR (e:Entrada) ON (e.folioEntrada);
-
-CREATE INDEX entrada_partida IF NOT EXISTS
-FOR (e:Entrada) ON (e.partida);
-
-CREATE INDEX salida_folio IF NOT EXISTS
-FOR (s:Salida) ON (s.folioSalida);
-
-CREATE INDEX salida_partida IF NOT EXISTS
-FOR (s:Salida) ON (s.partida);
-
-// --- Índices compuestos para búsquedas combinadas ---
 CREATE INDEX entrada_folio_partida IF NOT EXISTS
 FOR (e:Entrada) ON (e.folioEntrada, e.partida);
 
@@ -56,7 +42,7 @@ FOR (c:Cliente) ON (c.clienteTipo);
 
 
 // =================================================================
-// PASO 2: CARGAR NODOS COMPARTIDOS (Vendedor, Cliente, Articulo, Fecha)
+// PASO 2: CARGAR NODOS
 // =================================================================
 
 // --- 2.1 CARGAR VENDEDORES ---
@@ -124,126 +110,146 @@ CALL apoc.periodic.iterate(
 YIELD batches, total, errorMessages
 RETURN 'Fechas cargadas: ' + total AS resultado, errorMessages;
 
-
-// =================================================================
-// PASO 3: CARGAR GRAFO DE ENTRADAS
-// =================================================================
-
-// --- 3.1 CARGAR NODOS ENTRADA Y TODAS SUS RELACIONES ---
+// --- 2.5 CARGAR NODOS ENTRADA ---
 CALL apoc.periodic.iterate(
   "LOAD CSV WITH HEADERS FROM 'file:///Entrada.csv' AS row RETURN row",
-  "
-  // Crear nodo Entrada
-  MERGE (e:Entrada {folioEntrada: row.folioEntrada, partida: toInteger(row.partida)})
-  SET e.claveFecha = row.claveFecha,
-      e.claveCliente = row.claveCliente,
-      e.claveVendedor = row.claveVendedor,
-      e.claveArticulo = row.claveArticulo,
-      e.cantidad = toFloat(row.cantidad),
-      e.dpctDescuento = toFloat(row.dpctDescuento),
-      e.dTotalImporte = toFloat(row.dTotalImporte),
-      e.dTotalDescuento = toFloat(row.dTotalDescuento),
-      e.dTotalImpuesto = toFloat(row.dTotalImpuesto),
-      e.dTotal = toFloat(row.dTotal),
-      e.pctDescuentoGlobal = toFloat(row.pctDescuentoGlobal),
-      e.totalImporte = toFloat(row.totalImporte),
-      e.totalDescuento = toFloat(row.totalDescuento),
-      e.totalImpuesto = toFloat(row.totalImpuesto),
-      e.total = toFloat(row.total),
-      e.contarFolios = toFloat(row.contarFolios)
-  
-  // Relación: Vendedor -> SUMINISTRA -> Entrada
-  WITH e, row
-  MATCH (v:Vendedor {claveVendedor: row.claveVendedor})
-  MERGE (v)-[r1:SUMINISTRA]->(e)
-  
-  // Relación: Entrada -> CONTIENE -> Articulo
-  WITH e, row
-  MATCH (a:Articulo {claveArticulo: row.claveArticulo})
-  MERGE (e)-[r2:CONTIENE {
-    cantidad: toFloat(row.cantidad),
-    dpctDescuento: toFloat(row.dpctDescuento),
-    dTotalImporte: toFloat(row.dTotalImporte),
-    dTotalDescuento: toFloat(row.dTotalDescuento),
-    dTotalImpuesto: toFloat(row.dTotalImpuesto),
-    dTotal: toFloat(row.dTotal),
-    partida: toInteger(row.partida)
-  }]->(a)
-  
-  // Relación: Entrada -> OCURRE_EN -> Fecha
-  WITH e, row
-  MATCH (f:Fecha {claveFecha: row.claveFecha})
-  MERGE (e)-[r3:OCURRE_EN]->(f)
-  ",
-  {batchSize: 5000, parallel: false}
+  "MERGE (e:Entrada {folioEntrada: row.folioEntrada, partida: toInteger(row.partida)})
+   SET e.claveFecha = row.claveFecha,
+       e.claveCliente = row.claveCliente,
+       e.claveVendedor = row.claveVendedor,
+       e.claveArticulo = row.claveArticulo,
+       e.cantidad = toFloat(row.cantidad),
+       e.dpctDescuento = toFloat(row.dpctDescuento),
+       e.dTotalImporte = toFloat(row.dTotalImporte),
+       e.dTotalDescuento = toFloat(row.dTotalDescuento),
+       e.dTotalImpuesto = toFloat(row.dTotalImpuesto),
+       e.dTotal = toFloat(row.dTotal),
+       e.pctDescuentoGlobal = toFloat(row.pctDescuentoGlobal),
+       e.totalImporte = toFloat(row.totalImporte),
+       e.totalDescuento = toFloat(row.totalDescuento),
+       e.totalImpuesto = toFloat(row.totalImpuesto),
+       e.total = toFloat(row.total),
+       e.contarFolios = toFloat(row.contarFolios)",
+  {batchSize: 10000, parallel: false}
 )
 YIELD batches, total, errorMessages
-RETURN 'Entradas procesadas: ' + total AS resultado, errorMessages;
+RETURN 'Nodos Entrada cargados: ' + total AS resultado, errorMessages;
 
-
-// =================================================================
-// PASO 4: CARGAR GRAFO DE SALIDAS
-// =================================================================
-
-// --- 4.1 CARGAR NODOS SALIDA Y TODAS SUS RELACIONES ---
+// --- 2.6 CARGAR NODOS SALIDA ---
 CALL apoc.periodic.iterate(
   "LOAD CSV WITH HEADERS FROM 'file:///Salida.csv' AS row RETURN row",
-  "
-  // Crear nodo Salida
-  MERGE (s:Salida {folioSalida: row.folioSalida, partida: toInteger(row.partida)})
-  SET s.claveFecha = row.claveFecha,
-      s.claveCliente = row.claveCliente,
-      s.claveVendedor = row.claveVendedor,
-      s.claveArticulo = row.claveArticulo,
-      s.cantidad = toFloat(row.cantidad),
-      s.dpctDescuento = toFloat(row.dpctDescuento),
-      s.dTotalImporte = toFloat(row.dTotalImporte),
-      s.dTotalDescuento = toFloat(row.dTotalDescuento),
-      s.dTotalImpuesto = toFloat(row.dTotalImpuesto),
-      s.dTotal = toFloat(row.dTotal),
-      s.pctDescuentoGlobal = toFloat(row.pctDescuentoGlobal),
-      s.totalImporte = toFloat(row.totalImporte),
-      s.totalDescuento = toFloat(row.totalDescuento),
-      s.totalImpuesto = toFloat(row.totalImpuesto),
-      s.total = toFloat(row.total),
-      s.contarFolios = toFloat(row.contarFolios)
-  
-  // Relación: Cliente -> PROVOCA -> Salida
-  WITH s, row
-  MATCH (c:Cliente {claveCliente: row.claveCliente})
-  MERGE (c)-[r1:PROVOCA]->(s)
-  
-  // Relación: Vendedor -> PROCESA -> Salida
-  WITH s, row
-  MATCH (v:Vendedor {claveVendedor: row.claveVendedor})
-  MERGE (v)-[r2:PROCESA]->(s)
-  
-  // Relación: Salida -> CONTIENE -> Articulo
-  WITH s, row
-  MATCH (a:Articulo {claveArticulo: row.claveArticulo})
-  MERGE (s)-[r3:CONTIENE {
-    cantidad: toFloat(row.cantidad),
-    dpctDescuento: toFloat(row.dpctDescuento),
-    dTotalImporte: toFloat(row.dTotalImporte),
-    dTotalDescuento: toFloat(row.dTotalDescuento),
-    dTotalImpuesto: toFloat(row.dTotalImpuesto),
-    dTotal: toFloat(row.dTotal),
-    partida: toInteger(row.partida)
-  }]->(a)
-  
-  // Relación: Salida -> OCURRE_EN -> Fecha
-  WITH s, row
-  MATCH (f:Fecha {claveFecha: row.claveFecha})
-  MERGE (s)-[r4:OCURRE_EN]->(f)
-  ",
-  {batchSize: 5000, parallel: false}
+  "MERGE (s:Salida {folioSalida: row.folioSalida, partida: toInteger(row.partida)})
+   SET s.claveFecha = row.claveFecha,
+       s.claveCliente = row.claveCliente,
+       s.claveVendedor = row.claveVendedor,
+       s.claveArticulo = row.claveArticulo,
+       s.cantidad = toFloat(row.cantidad),
+       s.dpctDescuento = toFloat(row.dpctDescuento),
+       s.dTotalImporte = toFloat(row.dTotalImporte),
+       s.dTotalDescuento = toFloat(row.dTotalDescuento),
+       s.dTotalImpuesto = toFloat(row.dTotalImpuesto),
+       s.dTotal = toFloat(row.dTotal),
+       s.pctDescuentoGlobal = toFloat(row.pctDescuentoGlobal),
+       s.totalImporte = toFloat(row.totalImporte),
+       s.totalDescuento = toFloat(row.totalDescuento),
+       s.totalImpuesto = toFloat(row.totalImpuesto),
+       s.total = toFloat(row.total),
+       s.contarFolios = toFloat(row.contarFolios)",
+  {batchSize: 10000, parallel: false}
 )
 YIELD batches, total, errorMessages
-RETURN 'Salidas procesadas: ' + total AS resultado, errorMessages;
+RETURN 'Nodos Salida cargados: ' + total AS resultado, errorMessages;
 
 
 // =================================================================
-// PASO 5: VERIFICACIÓN DE CARGA
+// PASO 3: CREAR RELACIONES DE ENTRADAS
+// =================================================================
+
+// --- 3.1 RELACIÓN: Vendedor -> SUMINISTRA -> Entrada ---
+CALL apoc.periodic.iterate(
+  "LOAD CSV WITH HEADERS FROM 'file:///Entrada.csv' AS row RETURN row",
+  "MATCH (v:Vendedor {claveVendedor: row.claveVendedor})
+   MATCH (e:Entrada {folioEntrada: row.folioEntrada, partida: toInteger(row.partida)})
+   MERGE (v)-[:SUMINISTRA]->(e)",
+  {batchSize: 10000, parallel: false}
+)
+YIELD batches, total, errorMessages
+RETURN 'Relaciones SUMINISTRA creadas: ' + total AS resultado, errorMessages;
+
+// --- 3.2 RELACIÓN: Entrada -> CONTIENE -> Articulo ---
+CALL apoc.periodic.iterate(
+  "LOAD CSV WITH HEADERS FROM 'file:///Entrada.csv' AS row RETURN row",
+  "MATCH (e:Entrada {folioEntrada: row.folioEntrada, partida: toInteger(row.partida)})
+   MATCH (a:Articulo {claveArticulo: row.claveArticulo})
+   MERGE (e)-[:CONTIENE]->(a)",
+  {batchSize: 10000, parallel: false}
+)
+YIELD batches, total, errorMessages
+RETURN 'Relaciones CONTIENE (Entrada) creadas: ' + total AS resultado, errorMessages;
+
+// --- 3.3 RELACIÓN: Entrada -> OCURRE_EN -> Fecha ---
+CALL apoc.periodic.iterate(
+  "LOAD CSV WITH HEADERS FROM 'file:///Entrada.csv' AS row RETURN row",
+  "MATCH (e:Entrada {folioEntrada: row.folioEntrada, partida: toInteger(row.partida)})
+   MATCH (f:Fecha {claveFecha: row.claveFecha})
+   MERGE (e)-[:OCURRE_EN]->(f)",
+  {batchSize: 10000, parallel: false}
+)
+YIELD batches, total, errorMessages
+RETURN 'Relaciones OCURRE_EN (Entrada) creadas: ' + total AS resultado, errorMessages;
+
+
+// =================================================================
+// PASO 4: CREAR RELACIONES DE SALIDAS
+// =================================================================
+
+// --- 4.1 RELACIÓN: Cliente -> PROVOCA -> Salida ---
+CALL apoc.periodic.iterate(
+  "LOAD CSV WITH HEADERS FROM 'file:///Salida.csv' AS row RETURN row",
+  "MATCH (c:Cliente {claveCliente: row.claveCliente})
+   MATCH (s:Salida {folioSalida: row.folioSalida, partida: toInteger(row.partida)})
+   MERGE (c)-[:PROVOCA]->(s)",
+  {batchSize: 10000, parallel: false}
+)
+YIELD batches, total, errorMessages
+RETURN 'Relaciones PROVOCA creadas: ' + total AS resultado, errorMessages;
+
+// --- 4.2 RELACIÓN: Vendedor -> PROCESA -> Salida ---
+CALL apoc.periodic.iterate(
+  "LOAD CSV WITH HEADERS FROM 'file:///Salida.csv' AS row RETURN row",
+  "MATCH (v:Vendedor {claveVendedor: row.claveVendedor})
+   MATCH (s:Salida {folioSalida: row.folioSalida, partida: toInteger(row.partida)})
+   MERGE (v)-[:PROCESA]->(s)",
+  {batchSize: 10000, parallel: false}
+)
+YIELD batches, total, errorMessages
+RETURN 'Relaciones PROCESA creadas: ' + total AS resultado, errorMessages;
+
+// --- 4.3 RELACIÓN: Salida -> CONTIENE -> Articulo ---
+CALL apoc.periodic.iterate(
+  "LOAD CSV WITH HEADERS FROM 'file:///Salida.csv' AS row RETURN row",
+  "MATCH (s:Salida {folioSalida: row.folioSalida, partida: toInteger(row.partida)})
+   MATCH (a:Articulo {claveArticulo: row.claveArticulo})
+   MERGE (s)-[:CONTIENE]->(a)",
+  {batchSize: 10000, parallel: false}
+)
+YIELD batches, total, errorMessages
+RETURN 'Relaciones CONTIENE (Salida) creadas: ' + total AS resultado, errorMessages;
+
+// --- 4.4 RELACIÓN: Salida -> OCURRE_EN -> Fecha ---
+CALL apoc.periodic.iterate(
+  "LOAD CSV WITH HEADERS FROM 'file:///Salida.csv' AS row RETURN row",
+  "MATCH (s:Salida {folioSalida: row.folioSalida, partida: toInteger(row.partida)})
+   MATCH (f:Fecha {claveFecha: row.claveFecha})
+   MERGE (s)-[:OCURRE_EN]->(f)",
+  {batchSize: 10000, parallel: false}
+)
+YIELD batches, total, errorMessages
+RETURN 'Relaciones OCURRE_EN (Salida) creadas: ' + total AS resultado, errorMessages;
+
+
+// =================================================================
+//  VERIFICACIÓN DE CARGA
 // =================================================================
 
 // Contar nodos cargados
@@ -269,4 +275,3 @@ UNION
 MATCH ()-[r:CONTIENE]->() RETURN 'CONTIENE' AS relacion, COUNT(r) AS total
 UNION
 MATCH ()-[r:OCURRE_EN]->() RETURN 'OCURRE_EN' AS relacion, COUNT(r) AS total;
-
