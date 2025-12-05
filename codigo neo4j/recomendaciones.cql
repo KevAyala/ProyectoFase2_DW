@@ -20,6 +20,21 @@ RETURN Articulo1,
        FoliosJuntos
 ORDER BY FoliosJuntos DESC;
 
+CALL apoc.export.csv.query(
+  "MATCH (e1:Entrada)-[:CONTIENE]->(a1:Articulo)
+   MATCH (e2:Entrada)-[:CONTIENE]->(a2:Articulo)
+   WHERE e1.folioEntrada = e2.folioEntrada 
+     AND a1.claveArticulo < a2.claveArticulo
+   WITH a1.claveArticulo AS Articulo1,
+        a2.claveArticulo AS Articulo2,
+        COUNT(DISTINCT e1.folioEntrada) AS FoliosJuntos
+   WHERE FoliosJuntos >= 2
+   RETURN Articulo1, Articulo2, FoliosJuntos
+   ORDER BY Articulo1, FoliosJuntos DESC",
+  "RecomendacionesEntradas.csv",
+  {stream: true, batchSize: 10000}
+);
+
 
 // ---------------------------------------------------------------
 // ENTRADAS - 2. Artículos del mismo tipo que aparecen juntos
@@ -43,6 +58,23 @@ RETURN Articulo1,
        Tipo2,
        FoliosJuntos
 ORDER BY FoliosJuntos DESC;
+
+CALL apoc.export.csv.query(
+  "MATCH (e1:Entrada)-[:CONTIENE]->(a1:Articulo)
+   MATCH (e2:Entrada)-[:CONTIENE]->(a2:Articulo)
+   WHERE e1.folioEntrada = e2.folioEntrada 
+     AND a1.articuloTipo = a2.articuloTipo
+     AND a1.claveArticulo < a2.claveArticulo
+   WITH a1.claveArticulo AS Articulo1,
+        a2.claveArticulo AS Articulo2,
+        a1.articuloTipo AS Tipo,
+        COUNT(DISTINCT e1.folioEntrada) AS FoliosJuntos
+   WHERE FoliosJuntos >= 2
+   RETURN Articulo1, Articulo2, Tipo, FoliosJuntos
+   ORDER BY Articulo1, FoliosJuntos DESC",
+  "RecomendacionesEntradasMismoTipo.csv",
+  {stream: true, batchSize: 10000}
+);
 
 
 // ---------------------------------------------------------------
