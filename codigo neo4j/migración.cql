@@ -247,6 +247,34 @@ CALL apoc.periodic.iterate(
 YIELD batches, total, errorMessages
 RETURN 'Relaciones OCURRE_EN (Salida) creadas: ' + total AS resultado, errorMessages;
 
+//grafo de co-ocurrencias en SALIDAS
+CALL apoc.periodic.iterate(
+  "MATCH (s:Salida)
+   RETURN DISTINCT s.folioSalida AS folio",
+  
+  "
+   MATCH (s:Salida {folioSalida: folio})
+   WITH folio, collect(DISTINCT s.claveArticulo) AS articulos
+   WHERE size(articulos) > 1    
+
+   UNWIND range(0, size(articulos)-1) AS i
+   UNWIND range(i+1, size(articulos)-1) AS j
+   WITH
+     articulos[i] AS artA,
+     articulos[j] AS artB
+
+   MATCH (a1:Articulo {claveArticulo: artA})
+   MATCH (a2:Articulo {claveArticulo: artB})
+   MERGE (a1)-[r:COOCURRE_SALIDA]->(a2)
+   ON CREATE SET r.vecesJuntos = 1
+   ON MATCH  SET r.vecesJuntos = r.vecesJuntos + 1
+  ",
+
+  {batchSize: 100, parallel: false}
+)
+YIELD batches, total, errorMessages
+RETURN batches, total, errorMessages;
+
 
 // =================================================================
 //  VERIFICACIÓN DE CARGA
