@@ -35,6 +35,35 @@ CALL apoc.export.csv.query(
   {stream: true, batchSize: 10000}
 );
 
+// ---------------------------------------------------------------
+// ENTRADAS - 1.b Artículos que aparecen juntos en folios con cliente y vendedor
+// ---------------------------------------------------------------
+// Resultado: Articulo1, Articulo2, ClaveCliente, ClaveVendedor, FoliosJuntos
+
+MATCH (e:Entrada)-[:CONTIENE]->(a:Articulo)
+WITH e, a, e.folioEntrada AS folio, e.claveCliente AS cliente, e.claveVendedor AS vendedor
+
+// Todas las combinaciones dentro del mismo folio
+MATCH (e2:Entrada {folioEntrada: folio})
+MATCH (e2)-[:CONTIENE]->(a2:Articulo)
+WHERE a.claveArticulo < a2.claveArticulo
+
+WITH 
+    a.claveArticulo AS Articulo1,
+    a2.claveArticulo AS Articulo2,
+    cliente,
+    vendedor,
+    COUNT(DISTINCT folio) AS FoliosJuntos
+WHERE FoliosJuntos >= 2
+
+RETURN 
+    Articulo1,
+    Articulo2,
+    cliente AS ClaveCliente,
+    vendedor AS ClaveVendedor,
+    FoliosJuntos
+ORDER BY FoliosJuntos DESC;
+
 
 // ---------------------------------------------------------------
 // ENTRADAS - 2. Artículos del mismo tipo que aparecen juntos
