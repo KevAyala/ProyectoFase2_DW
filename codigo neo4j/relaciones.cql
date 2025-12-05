@@ -79,3 +79,55 @@ SET  r.partida = toInteger(row.partida),
 {batchSize: 500, parallel: true});
 
 CALL db.schema.visualization;
+
+
+//grafo de co-ocurrencias en SALIDAS
+CALL apoc.periodic.iterate(
+"
+MATCH (s:Salida)
+WITH s.folioSalida AS folio
+RETURN folio
+",
+"
+MATCH (s1:Salida {folioSalida: folio})
+MATCH (s2:Salida {folioSalida: folio})
+WHERE s1.claveArticulo < s2.claveArticulo  // evita duplicados tipo (A,B)/(B,A)
+
+MATCH (a1:Articulo {claveArticulo: s1.claveArticulo})
+MATCH (a2:Articulo {claveArticulo: s2.claveArticulo})
+
+MERGE (a1)-[r:COOCURRE_SALIDA]->(a2)
+ON CREATE SET r.vecesJuntos = 1
+ON MATCH  SET r.vecesJuntos = r.vecesJuntos + 1
+",
+{batchSize:1000, parallel:false}
+)
+YIELD total, batches, errorMessages
+RETURN total, batches, errorMessages;
+
+
+CALL apoc.periodic.iterate(
+"
+MATCH
+(a1:Articulo)<-[:CONTIENE]-(:Detalles)-[:PERTENECE]->(s:Salida),
+(a2:Articulo)<-[:CONTIENE]-(:Detalles)-[:PERTENECE]->(s),
+(t:ArticuloTipo)<-[:ES_DE_TIPO]-(a1)
+WHERE a1 <> a2
+  AND (a2)-[:ES_DE_TIPO]->(t)
+RETURN
+    a1.claveArticulo AS clave1,
+    a2.claveArticulo AS clave2,
+    t.claveTipo AS tipo,
+    COUNT(*) AS veces
+",
+"
+MATCH (a1:Articulo {claveArticulo: clave1})
+MATCH (a2:Articulo {claveArticulo: clave2})
+MERGE (a1)-[r:RECOMENDACION_TIPO]->(a2)
+SET r.tipo = tipo,
+    r.vecesJuntos = veces
+",
+{batchSize: 5000, parallel:false}
+)
+YIELD batches, total, errorMessages
+RETURN batches, total, errorMessages;
